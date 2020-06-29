@@ -3,9 +3,9 @@
 if [ "$1" = "train" ]; then
         echo "start to train......"
         CUDA_VISIBLE_DEVICES=0,1  python -W ignore::UserWarning -W ignore::SourceChangeWarning ../chinese_extraction_mrc/train.py  \
-                        --train_file /nas/lishengping/datas/dureader2/origin_dureader/small.zhidao.dev.json \
-                        --predict_file /nas/lishengping/datas/dureader2/origin_dureader/small.zhidao.dev.json \
-                        --output_dir ./output_data_dir  \
+                        --train_file ../data/small.zhidao.train.json \
+                        --predict_file ../data/small.zhidao.dev.json \
+                        --output_dir ./output_dir  \
                         --bert_model /nas/pretrain-bert/pretrain-pytorch/bert-base-chinese/ \
                         --train_batch_size 16  \
                         --num_train_epochs 3 \
@@ -16,8 +16,8 @@ if [ "$1" = "train" ]; then
 elif [ "$1" = "predict" ]; then
         echo "start to predict......"
         CUDA_VISIBLE_DEVICES=0 python -W ignore::UserWarning -W ignore::SourceChangeWarning ../chinese_extraction_mrc/train.py  \
-                        --predict_file /nas/lishengping/datas/dureader2/origin_dureader/small.zhidao.dev.json \
-                        --output_dir ./output_data_dir  \
+                        --predict_file ../data/small.zhidao.dev.json \
+                        --output_dir ./output_dir  \
                         --bert_model /nas/pretrain-bert/pretrain-pytorch/bert-base-chinese/ \
                         --do_predict  \
                         --predict_batch_size 16  \
