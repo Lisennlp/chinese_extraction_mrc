@@ -118,7 +118,6 @@ class InputFeatures(object):
 
 
 def read_squad_examples(input_file, is_training, version_2_with_negative):
-    """Read a SQuAD json file into a list of SquadExample."""
     """
       Read a DuReader json file into a list of examples.
       :param input_file:
@@ -177,7 +176,6 @@ def read_squad_examples(input_file, is_training, version_2_with_negative):
             # 取出答案 类似["电脑", "下载", "并", "安装", "光.....]，list类型
             most_related_para_seg = most_related_documents['segmented_paragraphs'][
                 most_related_para_id]
-            doc_tokens = most_related_para_seg    # 答案分词
 
             if len(sample['answer_spans']) == 0:    # 如果没有答案，过滤掉
                 continue
@@ -190,7 +188,7 @@ def read_squad_examples(input_file, is_training, version_2_with_negative):
             example = SquadExample(
                 qas_id=qas_id,
                 question_text=question_text,
-                doc_tokens=doc_tokens,
+                doc_tokens=most_related_para_seg,
                 orig_answer_text=orig_answer_text,
                 start_position=start_position,
                 end_position=end_position,
@@ -205,18 +203,18 @@ def read_squad_examples(input_file, is_training, version_2_with_negative):
 
 def convert_examples_to_features(examples, tokenizer, max_seq_length, doc_stride, max_query_length,
                                  is_training):
-    """Loads a data file into a list of `InputBatch`s."""
+    """Loads a data file into a list of `InputBatch`s.
+        start position: 在这个函数改变了起末位置，start_position = query_token_len + passage_token_start_position + 2
+        end position: end_position = query_token_len + passage_token_end_position + 2
+    """
 
     unique_id = 1000000000
 
     features = []
-    print(f'=========== examples len = {len(examples)}, ========================')
     for (example_index, example) in enumerate(examples):
         query_tokens = tokenizer.tokenize(example.question_text)
-
         if len(query_tokens) > max_query_length:
             query_tokens = query_tokens[0:max_query_length]
-
         tok_to_orig_index = []
         orig_to_tok_index = []
         all_doc_tokens = []
@@ -341,7 +339,6 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length, doc_stride
                     logger.info("start_position: %d" % (start_position))
                     logger.info("end_position: %d" % (end_position))
                     logger.info("answer: %s" % (answer_text))
-
             features.append(
                 InputFeatures(unique_id=unique_id,
                               example_index=example_index,
@@ -357,6 +354,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length, doc_stride
                               is_impossible=example.is_impossible))
             unique_id += 1
 
+    print(f'=========== features len = {len(features)}, ========================')
     return features
 
 
@@ -924,13 +922,7 @@ def main():
     args = parser.parse_args()
     print(args)
 
-    if args.server_ip and args.server_port:
-        # Distant debugging - see https://code.visualstudio.com/docs/python/debugging#_attach-to-a-local-script
-        import ptvsd
-        print("Waiting for debugger attach")
-        ptvsd.enable_attach(address=(args.server_ip, args.server_port), redirect_output=True)
-        ptvsd.wait_for_attach()
-
+   
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         n_gpu = torch.cuda.device_count()
@@ -957,6 +949,7 @@ def main():
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
+
     if n_gpu > 0:
         torch.cuda.manual_seed_all(args.seed)
 
@@ -989,7 +982,6 @@ def main():
 
     # Prepare model
     model = BertForQuestionAnswering.from_pretrained(args.bert_model)
-
     model.to(device)
 
     if n_gpu > 1:
@@ -1013,7 +1005,6 @@ def main():
                                         is_training=False,
                                         version_2_with_negative=args.version_2_with_negative)
     eval_dataloader = prepare_data(eval_examples, tokenizer, args, task_name='eval')
-
     if args.do_train:
         param_optimizer = list(model.named_parameters())
         param_optimizer = [n for n in param_optimizer if 'pooler' not in n[0]]
@@ -1040,6 +1031,8 @@ def main():
                     batch = tuple(
                         t.to(device) for t in batch)    # multi-gpu does scattering it-self
                 input_ids, input_mask, segment_ids, start_positions, end_positions = batch
+                # print(f'start_positions = {start_positions}')
+                # print(f'end_positions = {end_positions}')
                 loss = model(input_ids, segment_ids, input_mask, start_positions, end_positions)
                 if n_gpu > 1:
                     loss = loss.mean()    # mean() to average on multi-gpu.
@@ -1067,7 +1060,6 @@ def main():
                 torch.save(model_to_save.state_dict(), output_model_file)
                 model_to_save.config.to_json_file(output_config_file)
                 tokenizer.save_vocabulary(args.output_dir)
-                # Load a trained model and vocabulary that you have fine-tuned
 
     elif args.do_predict:
         predict_dataloader, predict_features = prepare_data(eval_examples,
@@ -1092,7 +1084,6 @@ def main():
                 end_logits = batch_end_logits[i].detach().cpu().tolist()
                 predict_features = predict_features[example_index.item()]    # 某句话的特征
                 unique_id = int(predict_features.unique_id)    # 某句话的id
-                # print(f'start_logits len = {len(start_logits)}')
 
                 all_results.append(
                     RawResult(unique_id=unique_id, start_logits=start_logits,
@@ -1104,6 +1095,9 @@ def main():
                           args.max_answer_length, args.do_lower_case, output_prediction_file,
                           output_nbest_file, output_null_log_odds_file, args.verbose_logging,
                           args.version_2_with_negative, args.null_score_diff_threshold)
+    else:
+        raise ValueError('please confirm at least one task mode, such as ’train‘ or ’predict‘.')
 
 
-main()
+if __name__ == '__main__':
+    main()

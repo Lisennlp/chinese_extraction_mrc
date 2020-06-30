@@ -986,11 +986,14 @@ class BertForQuestionAnswering(BertPreTrainedModel):
                 start_positions=None,
                 end_positions=None):
         all_encoder_layers, _ = self.bert(input_ids, token_type_ids, attention_mask)
+        # bsz x len x 768
         sequence_output = all_encoder_layers[-1]
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
+        print(f'start_logits shape = {start_logits.shape}')
+        print(f'start_positions shape = {start_positions.shape}')
 
         if start_positions is not None and end_positions is not None:
             # If we are on multi-GPU, split add a dimension
@@ -1003,7 +1006,7 @@ class BertForQuestionAnswering(BertPreTrainedModel):
             start_positions.clamp_(0, ignored_index)
             end_positions.clamp_(0, ignored_index)
 
-            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
+            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)  # 忽略最后一个SEP
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
